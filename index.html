@@ -1,1 +1,57 @@
-<canvas id=c></canvas><script>c=document.getElementById("c");x=c.getContext("2d");c.width=innerWidth;c.height=innerHeight;k={};addEventListener("keydown",e=>k[e.code]=1);addEventListener("keyup",e=>k[e.code]=0);m={x:100,y:100,vx:0,vy:0,w:30,h:40,on:0};B=25;C=500;ch=new Map();no=x=>Math.sin(x*.01)*20;bl=(x,y,t="d")=>({x,y,w:B,h:B,t});gc=cx=>{if(ch.has(cx))return ch.get(cx);b=[];mo=[];for(i=0;i<20;i++){xx=cx*C+i*B;yy=c.height/2+no(xx);b.push(bl(xx,yy,"g"));for(j=1;j<5;j++)b.push(bl(xx,yy+j*B))}for(i=0;i<4;i++)mo.push({x:cx*C+Math.random()*C,y:100,hp:20});ch.set(cx,{b,mo});return ch.get(cx)};gx=()=>Math.floor(m.x/C);cam=0;addEventListener("mousedown",e=>{cx=gx();q=gc(cx);wx=e.clientX+cam;wy=e.clientY;bx=Math.floor(wx/B)*B;by=Math.floor(wy/B)*B;if(e.button==0)q.b.push(bl(bx,by));if(e.button==2)for(i=q.b.length-1;i>=0;i--)if(q.b[i].x==bx&&q.b[i].y==by)q.b.splice(i,1)});addEventListener("contextmenu",e=>e.preventDefault());upd=()=>{if(k.ArrowLeft)m.vx=-4;else if(k.ArrowRight)m.vx=4;else m.vx*=.8;if(k.Space&&m.on)m.vy=-10,m.on=0;m.vy+=.5;m.x+=m.vx;m.y+=m.vy;cx=gx();q=gc(cx);m.on=0;for(b of q.b)if(m.x<b.x+b.w&&m.x+m.w>b.x&&m.y+m.h<b.y+5&&m.y+m.h+m.vy>b.y)m.y=b.y-m.h,m.vy=0,m.on=1;for(o of q.mo){d=m.x-o.x;if(Math.abs(d)<250)o.x+=Math.sign(d)*1.2;if(Math.abs(d)<25)m.vy-=.2}cam=m.x-innerWidth/2};dr=()=>{x.clearRect(0,0,c.width,c.height);cx=gx();q=gc(cx);for(b of q.b){x.fillStyle=b.t=="g"?"#3c3":"#8b5a2b";x.fillRect(b.x-cam,b.y,b.w,b.h)}x.fillStyle="red";for(o of q.mo)x.fillRect(o.x-cam,o.y,20,20);x.fillStyle="pink";x.fillRect(m.x-cam,m.y,m.w,m.h)};lp=()=>{upd();dr();requestAnimationFrame(lp)};lp();</script>
+<canvas id="c"></canvas>
+<script>
+const c=document.getElementById("c");
+const x=c.getContext("2d");
+
+c.width=innerWidth;
+c.height=innerHeight;
+
+let t=0;
+
+function drawStick(x0,y0){
+
+  // 머리
+  x.beginPath();
+  x.arc(x0,y0,20,0,Math.PI*2);
+  x.stroke();
+
+  // 몸
+  x.beginPath();
+  x.moveTo(x0,y0+20);
+  x.lineTo(x0,y0+80);
+  x.stroke();
+
+  // 팔 (애니메이션)
+  let swing=Math.sin(t)*20;
+
+  x.beginPath();
+  x.moveTo(x0,y0+40);
+  x.lineTo(x0-30+swing,y0+60);
+  x.moveTo(x0,y0+40);
+  x.lineTo(x0+30-swing,y0+60);
+  x.stroke();
+
+  // 다리
+  x.beginPath();
+  x.moveTo(x0,y0+80);
+  x.lineTo(x0-20,y0+120);
+  x.moveTo(x0,y0+80);
+  x.lineTo(x0+20,y0+120);
+  x.stroke();
+
+  // 눈 (표정 핵심)
+  x.fillRect(x0-7,y0-5,3,3);
+  x.fillRect(x0+4,y0-5,3,3);
+}
+
+function loop(){
+  x.clearRect(0,0,c.width,c.height);
+
+  drawStick(innerWidth/2,innerHeight/2);
+
+  t+=0.1;
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
