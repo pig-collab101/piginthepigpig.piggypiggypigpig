@@ -2,10 +2,10 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>PIG RPG ENGINE</title>
+<title>Pig RPG Engine</title>
 <style>
-body{margin:0;overflow:hidden;background:#000}
-canvas{display:block}
+body{margin:0;overflow:hidden;background:#87CEEB;}
+canvas{display:block;}
 </style>
 </head>
 
@@ -13,230 +13,184 @@ canvas{display:block}
 <canvas id="c"></canvas>
 
 <script>
-
-//====================
-// CANVAS
-//====================
 const canvas=document.getElementById("c");
 const ctx=canvas.getContext("2d");
 
-function resize(){
-  canvas.width=innerWidth;
-  canvas.height=innerHeight;
-}
-resize();
-addEventListener("resize",resize);
+canvas.width=innerWidth;
+canvas.height=innerHeight;
 
-//====================
-// WORLD
-//====================
-const world={
-  cameraX:0,
-  groundY:0
+// ======================
+// 🧠 GAME STATE ENGINE
+// ======================
+const GAME={
+  state:"world", // world / battle
+  keys:{},
+  cameraX:0
 };
 
-//====================
-// PLAYER
-//====================
+// ======================
+// 🐷 PLAYER
+// ======================
 const player={
   x:100,y:200,w:40,h:40,
   vx:0,vy:0,
-  hp:100,
+  hp:100,maxHp:100,
   dir:1
 };
 
-//====================
-// INPUT
-//====================
-const key={};
-addEventListener("keydown",e=>key[e.code]=1);
-addEventListener("keyup",e=>key[e.code]=0);
+// ======================
+// 👾 DATA
+// ======================
+let monsters=[];
+let projectiles=[];
+let materials={iron:5,wood:5};
 
-//====================
-// WEAPON SYSTEM
-//====================
-const inventory={
-  weapons:[{name:"나무검",atk:5}]
-};
+// ======================
+// 🧬 MONSTER TEMPLATE (40종 확장용)
+// ======================
+const MONSTER_BASE=[
+ {name:"슬라임",hp:30,atk:3,color:"green"},
+ {name:"박쥐",hp:20,atk:5,color:"purple"},
+ {name:"해골",hp:50,atk:8,color:"gray"}
+];
 
-const weaponTree={
-  "나무검":"철검",
-  "철검":"마검",
-  "마검":"용검",
-  "용검":"신검"
-};
+// ======================
+// 🔥 MONSTER GENERATOR (40개 자동)
+// ======================
+function spawnMonsters(count){
+  monsters=[];
+  for(let i=0;i<count;i++){
+    const base=MONSTER_BASE[i%MONSTER_BASE.length];
 
-function getAttack(){
-  return inventory.weapons.at(-1).atk;
+    monsters.push({
+      ...base,
+      x:300+i*60,
+      y:200,
+      hp:base.hp+Math.random()*10,
+      dead:false
+    });
+  }
 }
 
-function evolveWeapon(){
-  const w=inventory.weapons.at(-1);
-  if(!w) return;
+// ======================
+// ⚔️ COMBAT ENGINE
+// ======================
+function attack(){
+  if(GAME.state!=="battle") return;
 
-  const next=weaponTree[w.name];
-  if(!next) return;
-
-  w.name=next;
-  w.atk+=10;
-}
-
-//====================
-// BIOME
-//====================
-function getBiome(x){
-  if(x<3000) return "#87CEEB";
-  if(x<7000) return "#2b2b3c";
-  if(x<12000) return "#ff5500";
-  return "#8fdfff";
-}
-
-//====================
-// ENEMIES
-//====================
-const enemies=[];
-
-function spawn(x){
-  enemies.push({
-    x,
-    y:world.groundY-40,
-    w:35,h:35,
-    hp:20+Math.random()*30,
-    speed:1+Math.random()*1.5,
-    dead:false,
-    knock:0
+  monsters.forEach(m=>{
+    if(!m.dead && Math.abs(m.x-player.x)<60){
+      m.hp-=20;
+      if(m.hp<=0) m.dead=true;
+    }
   });
 }
 
-for(let i=0;i<20;i++){
-  spawn(300+i*250);
-}
+// ======================
+// 🧪 CRAFT SYSTEM
+// ======================
+const recipes={
+  iron_sword:{iron:3,wood:1}
+};
 
-//====================
-// ATTACK
-//====================
-function attack(){
-  const dmg=getAttack();
+function craft(name){
+  const r=recipes[name];
+  if(!r) return;
 
-  for(const m of enemies){
-    if(m.dead) continue;
-
-    const dx=Math.abs(player.x-m.x);
-    const dy=Math.abs(player.y-m.y);
-
-    if(dx<60&&dy<40){
-      m.hp-=dmg;
-
-      m.knock=player.dir*8;
-
-      if(m.hp<=0) m.dead=true;
-    }
+  for(let k in r){
+    if(materials[k]<r[k]) return;
   }
+
+  for(let k in r){
+    materials[k]-=r[k];
+  }
+
+  console.log("crafted:",name);
 }
 
-//====================
-// UPDATE
-//====================
+// ======================
+// 🎮 INPUT
+// ======================
+addEventListener("keydown",e=>{
+  GAME.keys[e.code]=true;
+
+  if(e.code==="Space") attack();
+
+  if(e.code==="KeyB"){
+    GAME.state="battle";
+    spawnMonsters(10); // 40 가능
+  }
+
+  if(e.code==="KeyM"){
+    GAME.state="world";
+  }
+
+  if(e.code==="KeyC"){
+    craft("iron_sword");
+  }
+});
+
+addEventListener("keyup",e=>{
+  GAME.keys[e.code]=false;
+});
+
+// ======================
+// 🔄 UPDATE ENGINE
+// ======================
 function update(){
+  if(GAME.keys["ArrowRight"]) player.x+=4;
+  if(GAME.keys["ArrowLeft"]) player.x-=4;
 
-  // move
-  player.vx=0;
-  if(key["ArrowLeft"]) player.vx=-3;
-  if(key["ArrowRight"]) player.vx=3;
+  GAME.cameraX=player.x-innerWidth/2;
 
-  player.x+=player.vx;
-
-  world.cameraX=player.x-innerWidth/2;
-
-  // enemies
-  for(const m of enemies){
-
-    if(m.dead) continue;
-
-    const dx=player.x-m.x;
-
-    if(Math.abs(dx)<200){
-      m.x+=Math.sign(dx)*m.speed;
-    }
-
-    if(Math.abs(dx)<30){
-      player.hp-=0.2;
-    }
-
-    if(m.knock){
-      m.x+=m.knock;
-      m.knock*=0.8;
-    }
+  if(GAME.state==="battle"){
+    monsters.forEach(m=>{
+      if(!m.dead){
+        let dx=player.x-m.x;
+        m.x+=Math.sign(dx)*0.5;
+      }
+    });
   }
 }
 
-//====================
-// DRAW
-//====================
+// ======================
+// 🎨 DRAW ENGINE
+// ======================
 function draw(){
-
-  // bg
-  ctx.fillStyle=getBiome(player.x);
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  world.groundY=canvas.height-100;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
   // ground
   ctx.fillStyle="#3CB043";
-  ctx.fillRect(0,world.groundY,canvas.width,100);
+  ctx.fillRect(0,300,canvas.width,200);
 
   // player
   ctx.fillStyle="pink";
-  ctx.fillRect(player.x-world.cameraX,player.y,player.w,player.h);
+  ctx.fillRect(player.x-GAME.cameraX,player.y,40,40);
 
-  // weapon
-  ctx.fillStyle="white";
-  ctx.fillText(
-    inventory.weapons.at(-1).name,
-    player.x-world.cameraX,
-    player.y-10
-  );
+  // monsters
+  monsters.forEach(m=>{
+    if(m.dead) return;
 
-  // enemies
-  for(const m of enemies){
-    if(m.dead) continue;
+    ctx.fillStyle=m.color;
+    ctx.fillRect(m.x-GAME.cameraX,m.y,30,30);
+  });
 
-    ctx.fillStyle="lime";
-    ctx.fillRect(
-      m.x-world.cameraX,
-      m.y,
-      m.w,
-      m.h
-    );
-  }
-
-  // HP
-  ctx.fillStyle="red";
-  ctx.fillRect(20,20,200,10);
-
-  ctx.fillStyle="lime";
-  ctx.fillRect(20,20,200*(player.hp/100),10);
+  // UI
+  ctx.fillStyle="#000";
+  ctx.fillText("STATE:"+GAME.state,20,20);
 }
 
-//====================
-// LOOP
-//====================
+// ======================
+// 🎮 LOOP
+// ======================
 function loop(){
   update();
   draw();
   requestAnimationFrame(loop);
 }
+
+spawnMonsters(5);
 loop();
-
-//====================
-// CONTROLS
-//====================
-addEventListener("keydown",e=>{
-
-  if(e.code==="KeyJ") attack();
-  if(e.code==="KeyK") evolveWeapon();
-
-});
 
 </script>
 </body>
