@@ -2,9 +2,9 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Mini Minecraft Engine</title>
+<title>Block War Engine</title>
 <style>
-body{margin:0;overflow:hidden;background:#000;}
+body{margin:0;overflow:hidden;background:#87CEEB;}
 canvas{display:block;}
 </style>
 </head>
@@ -20,91 +20,85 @@ c.width=innerWidth;
 c.height=innerHeight;
 
 // ======================
-// 설정
+// 기본 값
 // ======================
-const size=30;
-const chunks={};
 const keys={};
-
-// ======================
-// 입력
-// ======================
 addEventListener("keydown",e=>keys[e.code]=1);
 addEventListener("keyup",e=>keys[e.code]=0);
+
+const blockSize=40;
+const blocks=[];
+const bullets=[];
 
 // ======================
 // 플레이어
 // ======================
-const p={
-  x:200,y:100,
+const player={
+  x:200,y:200,w:30,h:50,
   vx:0,vy:0,
   dir:1,
   onGround:false
 };
 
 // ======================
-// 청크 생성 (진짜 핵심)
+// 적
 // ======================
-function getBlock(x,y){
-  const cx=Math.floor(x/300);
-  const cy=Math.floor(y/300);
+const enemies=[
+  {x:600,y:100,w:30,h:40,hp:50,dead:false}
+];
 
-  const key=cx+","+cy;
+// ======================
+// 블록 설치/삭제
+// ======================
+addEventListener("keydown",e=>{
 
-  if(!chunks[key]){
-    chunks[key]=generateChunk(cx,cy);
+  // 블록 설치
+  if(e.code==="KeyZ"){
+    blocks.push({
+      x:Math.floor(player.x/blockSize)*blockSize,
+      y:Math.floor(player.y/blockSize)*blockSize+40
+    });
   }
 
-  return chunks[key][x+","+y];
-}
-
-function generateChunk(cx,cy){
-  const data={};
-
-  for(let y=0;y<10;y++){
-    for(let x=0;x<10;x++){
-
-      let wx=cx*10+x;
-      let wy=cy*10+y;
-
-      let ground=Math.sin(wx*0.3)*3+6;
-
-      let type=0; // 0=공기,1=흙,2=돌
-
-      if(wy>ground){
-        type=1;
+  // 블록 삭제
+  if(e.code==="KeyX"){
+    for(let i=blocks.length-1;i>=0;i--){
+      let b=blocks[i];
+      if(Math.abs(b.x-player.x)<50 && Math.abs(b.y-player.y)<80){
+        blocks.splice(i,1);
+        break;
       }
-      if(wy>8){
-        type=2;
-      }
-
-      data[wx+","+wy]=type;
     }
   }
 
-  return data;
-}
+  // 총 발사
+  if(e.code==="KeyF"){
+    bullets.push({
+      x:player.x,
+      y:player.y,
+      vx:8*player.dir
+    });
+  }
+
+});
 
 // ======================
-// 블록 조회
+// 충돌 (블록)
 // ======================
-function blockAt(x,y){
-  let bx=Math.floor(x/size);
-  let by=Math.floor(y/size);
-  return getBlock(bx,by)||0;
-}
+function collide(ent){
+  ent.onGround=false;
 
-// ======================
-// 충돌
-// ======================
-function collide(){
-  p.onGround=false;
-
-  let under=blockAt(p.x,p.y+40);
-
-  if(under!==0){
-    p.onGround=true;
-    p.vy=0;
+  for(const b of blocks){
+    if(
+      ent.x+ent.w>b.x &&
+      ent.x<b.x+blockSize &&
+      ent.y+ent.h>b.y &&
+      ent.y+ent.h-ent.vy<=b.y
+    ){
+      ent.y=b.y-ent.h;
+      ent.vy=0;
+      ent.onGround=true;
+    }
   }
 }
 
@@ -113,17 +107,46 @@ function collide(){
 // ======================
 function update(){
 
-  if(keys.ArrowLeft)p.x-=3;
-  if(keys.ArrowRight)p.x+=3;
+  // 이동
+  if(keys.ArrowLeft){player.x-=4;player.dir=-1;}
+  if(keys.ArrowRight){player.x+=4;player.dir=1;}
 
-  if(keys.Space && p.onGround){
-    p.vy=-8;
+  // 점프
+  if(keys.Space && player.onGround){
+    player.vy=-10;
   }
 
-  p.vy+=0.4;
-  p.y+=p.vy;
+  // 중력
+  player.vy+=0.5;
+  player.y+=player.vy;
 
-  collide();
+  collide(player);
+
+  // 적 이동
+  enemies.forEach(e=>{
+    if(e.dead)return;
+    if(Math.abs(player.x-e.x)<200){
+      e.x+=Math.sign(player.x-e.x)*1.2;
+    }
+  });
+
+  // 총알
+  for(let i=bullets.length-1;i>=0;i--){
+    let b=bullets[i];
+    b.x+=b.vx;
+
+    // 적 충돌
+    for(const e of enemies){
+      if(!e.dead &&
+        Math.abs(b.x-e.x)<20 &&
+        Math.abs(b.y-e.y)<30){
+        e.hp-=20;
+        bullets.splice(i,1);
+        if(e.hp<=0)e.dead=true;
+        break;
+      }
+    }
+  }
 
 }
 
@@ -134,33 +157,33 @@ function draw(){
 
   x.clearRect(0,0,c.width,c.height);
 
-  // 블록 렌더링
-  for(let cx=-20;cx<20;cx++){
-    for(let cy=-10;cy<15;cy++){
+  // 하늘
+  x.fillStyle="#87CEEB";
+  x.fillRect(0,0,c.width,c.height);
 
-      let bx=Math.floor(p.x/size)+cx;
-      let by=Math.floor(p.y/size)+cy;
-
-      let type=blockAt(bx*size,by*size);
-
-      let px=cx*size - (p.x%size);
-      let py=cy*size - (p.y%size);
-
-      if(type===1){
-        x.fillStyle="#3b7d2a"; // 흙
-      }
-      else if(type===2){
-        x.fillStyle="#555"; // 돌
-      }
-      else continue;
-
-      x.fillRect(px,py,size,size);
-    }
+  // 블록
+  x.fillStyle="#8B5A2B";
+  for(const b of blocks){
+    x.fillRect(b.x,b.y,blockSize,blockSize);
   }
 
   // 플레이어
   x.fillStyle="pink";
-  x.fillRect(200,200,20,40);
+  x.fillRect(player.x,player.y,player.w,player.h);
+
+  // 적
+  x.fillStyle="green";
+  enemies.forEach(e=>{
+    if(!e.dead){
+      x.fillRect(e.x,e.y,e.w,e.h);
+    }
+  });
+
+  // 총알
+  x.fillStyle="orange";
+  bullets.forEach(b=>{
+    x.fillRect(b.x,b.y,6,3);
+  });
 
 }
 
