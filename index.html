@@ -1,226 +1,178 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>Pig Engine Reset v1</title>
+<meta charset="utf-8">
+<title>Chunk World Engine v1</title>
 <style>
-body{margin:0;overflow:hidden;background:#87CEEB;}
-canvas{display:block;}
+body{margin:0;overflow:hidden;background:#87CEEB}
+canvas{display:block}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 
 <script>
-// =====================
-// CORE ENGINE
-// =====================
 const canvas=document.getElementById("c");
 const ctx=canvas.getContext("2d");
 
-function resize(){
-  canvas.width=innerWidth;
-  canvas.height=innerHeight;
-}
-window.onresize=resize;
-resize();
+canvas.width=innerWidth;
+canvas.height=innerHeight;
 
-// =====================
-// INPUT (BUG FIXED)
-// =====================
-const key={};
-
-window.addEventListener("keydown",e=>{
-  key[e.code]=true;
-});
-
-window.addEventListener("keyup",e=>{
-  key[e.code]=false;
-});
-
-// =====================
-// WORLD
-// =====================
-const world={
-  width:8000,
-  groundY:400
+window.onresize=()=> {
+canvas.width=innerWidth;
+canvas.height=innerHeight;
 };
+
+//////////////////////////////
+// 🎮 WORLD CONFIG
+//////////////////////////////
+const TILE=40;
+const CHUNK_SIZE=20;
 
 let cameraX=0;
 
-// =====================
-// PLAYER (LOCKED CONTROL)
-// =====================
+//////////////////////////////
+// 👤 PLAYER
+//////////////////////////////
 const player={
-  x:100,y:200,
-  w:40,h:50,
-  vx:0,vy:0,
-  speed:5,
-  jumpPower:12,
-  onGround:false,
-  hp:100
+x:100,y:100,w:30,h:40,
+vx:0,vy:0,
+speed:4,
+jumpPower:12,
+onGround:false
 };
 
-function updatePlayer(){
-  // move
-  if(key["ArrowLeft"]) player.vx=-player.speed;
-  else if(key["ArrowRight"]) player.vx=player.speed;
-  else player.vx*=0.8;
+//////////////////////////////
+// 🌍 CHUNKS (무한 월드 핵심)
+//////////////////////////////
+const chunks=new Map();
 
-  // jump
-  if(key["Space"] && player.onGround){
-    player.vy=-player.jumpPower;
-    player.onGround=false;
-  }
+function getChunk(cx){
+if(chunks.has(cx)) return chunks.get(cx);
 
-  player.vy+=0.6;
+let data=[];
 
-  player.x+=player.vx;
-  player.y+=player.vy;
+// 🌱 자동 생성 (노이즈 느낌)
+for(let i=0;i<CHUNK_SIZE;i++){
+let worldX=cx*CHUNK_SIZE+i;
+let h=10+Math.floor(Math.sin(worldX*0.2)*3);
 
-  // ground
-  if(player.y+player.h>world.groundY){
-    player.y=world.groundY-player.h;
-    player.vy=0;
-    player.onGround=true;
-  }
-}
-
-// =====================
-// CAMERA (FIXED)
-// =====================
-function updateCamera(){
-  cameraX = player.x - canvas.width/2;
-  if(cameraX<0) cameraX=0;
-}
-
-// =====================
-// MONSTER AUTO GENERATOR (40 TYPES)
-// =====================
-const monsters=[];
-
-function createMonsterType(i){
-  return {
-    id:i,
-    hp:20+i*2,
-    speed:1+(i%5)*0.2,
-    damage:5+(i%3),
-    color:`hsl(${i*9},70%,60%)`
-  };
-}
-
-const monsterTypes=[];
-for(let i=0;i<40;i++){
-  monsterTypes.push(createMonsterType(i));
-}
-
-function spawnMonsters(){
-  for(let i=0;i<30;i++){
-    const t=monsterTypes[i%40];
-    monsters.push({
-      x:400+i*250,
-      y:world.groundY-40,
-      w:35,h:35,
-      vx:0,
-      hp:t.hp,
-      type:t
-    });
-  }
-}
-spawnMonsters();
-
-// =====================
-// COMBAT SYSTEM (SEPARATED)
-// =====================
-function attack(){
-  monsters.forEach(m=>{
-    if(Math.abs(player.x-m.x)<60){
-      m.hp-=20;
-    }
-  });
-}
-
-window.addEventListener("keydown",e=>{
-  if(e.code==="KeyJ") attack();
+data.push({
+x:worldX*TILE,
+y:canvas.height - h*TILE,
+w:TILE,
+h:h*TILE
 });
-
-// =====================
-// MONSTER AI (NOT PLAYER CONTROLLED)
-// =====================
-function updateMonsters(){
-  monsters.forEach(m=>{
-    if(m.hp<=0) return;
-
-    const dx=player.x-m.x;
-
-    if(Math.abs(dx)<300){
-      m.x += Math.sign(dx)*m.type.speed;
-    }
-  });
 }
 
-// =====================
-// COLLISION SIMPLE FIX
-// =====================
-function collision(){
-  monsters.forEach(m=>{
-    if(m.hp<=0) return;
-
-    if(
-      Math.abs(player.x-m.x)<30 &&
-      Math.abs(player.y-m.y)<40
-    ){
-      player.hp-=0.5;
-    }
-  });
+chunks.set(cx,data);
+return data;
 }
 
-// =====================
-// DRAW
-// =====================
+//////////////////////////////
+// 🎮 INPUT
+//////////////////////////////
+const key={};
+
+window.addEventListener("keydown",e=>key[e.code]=true);
+window.addEventListener("keyup",e=>key[e.code]=false);
+
+function updatePlayer(){
+player.vx=0;
+
+if(key["ArrowLeft"]) player.vx=-player.speed;
+if(key["ArrowRight"]) player.vx=player.speed;
+
+if(key["Space"] && player.onGround){
+player.vy=-player.jumpPower;
+player.onGround=false;
+}
+
+player.vy+=0.5;
+
+player.x+=player.vx;
+player.y+=player.vy;
+
+// 바닥 충돌
+player.onGround=false;
+const cx=Math.floor(player.x/(TILE*CHUNK_SIZE));
+const chunk=getChunk(cx);
+
+for(const b of chunk){
+if(player.x < b.x+b.w &&
+player.x+player.w > b.x &&
+player.y < b.y+b.h &&
+player.y+player.h > b.y){
+
+player.y=b.y-player.h;
+player.vy=0;
+player.onGround=true;
+}
+}
+
+cameraX=player.x-innerWidth/2;
+}
+
+//////////////////////////////
+// 👾 SIMPLE MONSTER SYSTEM
+//////////////////////////////
+const mobs=[];
+
+function spawnMob(x){
+mobs.push({x,y:0,hp:10});
+}
+
+function updateMobs(){
+for(const m of mobs){
+if(m.x<player.x) m.x+=1;
+else m.x-=1;
+}
+}
+
+//////////////////////////////
+// 🎨 DRAW
+//////////////////////////////
 function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // background
-  ctx.fillStyle="#87CEEB";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+// sky
+ctx.fillStyle="#87CEEB";
+ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  // ground
-  ctx.fillStyle="#3cb043";
-  ctx.fillRect(0,world.groundY-cameraX,world.width,200);
+// chunks
+for(let i=-2;i<3;i++){
+const cx=Math.floor((player.x+i*innerWidth)/(TILE*CHUNK_SIZE));
+const chunk=getChunk(cx);
 
-  // player
-  ctx.fillStyle="pink";
-  ctx.fillRect(player.x-cameraX,player.y,player.w,player.h);
-
-  // monsters
-  monsters.forEach(m=>{
-    if(m.hp<=0) return;
-
-    ctx.fillStyle=m.type.color;
-    ctx.fillRect(m.x-cameraX,m.y,m.w,m.h);
-  });
-
-  // UI
-  ctx.fillStyle="black";
-  ctx.fillText("HP:"+player.hp,20,20);
+for(const b of chunk){
+ctx.fillStyle="#3cb043";
+ctx.fillRect(b.x-cameraX,b.y,b.w,b.h);
+}
 }
 
-// =====================
-// LOOP
-// =====================
-function loop(){
-  updatePlayer();
-  updateCamera();
-  updateMonsters();
-  collision();
+// player
+ctx.fillStyle="pink";
+ctx.fillRect(player.x-cameraX,player.y,player.w,player.h);
 
-  draw();
-  requestAnimationFrame(loop);
+// mobs
+ctx.fillStyle="red";
+for(const m of mobs){
+ctx.fillRect(m.x-cameraX,player.y-20,20,20);
+}
+}
+
+//////////////////////////////
+// LOOP
+//////////////////////////////
+function loop(){
+updatePlayer();
+updateMobs();
+draw();
+requestAnimationFrame(loop);
 }
 
 loop();
-</script>
 
+</script>
 </body>
 </html>
