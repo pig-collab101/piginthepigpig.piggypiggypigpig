@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-<meta charset="utf-8">
-<title>Pig Engine v1</title>
+<meta charset="UTF-8">
+<title>Pig Engine P2</title>
 <style>
 body{margin:0;overflow:hidden;background:#87CEEB;}
 canvas{display:block;}
@@ -13,47 +13,65 @@ canvas{display:block;}
 <canvas id="c"></canvas>
 
 <script>
-// ======================
-// 1. CANVAS
-// ======================
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
+
+// =====================
+// CANVAS
+// =====================
+const canvas=document.getElementById("c");
+const ctx=canvas.getContext("2d");
 
 function resize(){
-    canvas.width = innerWidth;
-    canvas.height = innerHeight;
+    canvas.width=innerWidth;
+    canvas.height=innerHeight;
 }
-window.addEventListener("resize", resize);
+window.addEventListener("resize",resize);
 resize();
 
-// ======================
-// 2. STATE (절대 여기서만 데이터)
-// ======================
-const game = {
+// =====================
+// STATE
+// =====================
+const keys={};
+
+const game={
     paused:false
 };
 
-const player = {
+const player={
     x:100,
     y:300,
     vx:0,
     vy:0,
     speed:5,
     gravity:0.7,
-    hp:100
+    hp:100,
+    onGround:false,
+    cooldown:0
 };
 
-const keys = {};
+const bullets=[];
+const enemies=[];
 
-const enemies = [
-    {x:500,y:300,hp:30,speed:1,type:"slime"},
-    {x:800,y:300,hp:50,speed:1.5,type:"bat"},
-    {x:1100,y:300,hp:80,speed:2,type:"orc"}
-];
+// =====================
+// MONSTER AUTO GEN (3 TYPES)
+// =====================
+for(let i=0;i<30;i++){
 
-// ======================
-// 3. INPUT
-// ======================
+    let type = i%3;
+
+    enemies.push({
+        x:400+i*140,
+        y:300,
+        hp:20+type*20,
+        speed:1+type*0.5,
+        type:type, // 0 slime,1 melee,2 ranged
+        alive:true,
+        cooldown:50
+    });
+}
+
+// =====================
+// INPUT
+// =====================
 window.addEventListener("keydown",e=>{
     keys[e.code]=true;
 });
@@ -62,61 +80,148 @@ window.addEventListener("keyup",e=>{
     keys[e.code]=false;
 });
 
-// ======================
-// 4. UPDATE
-// ======================
+// =====================
+// PLAYER UPDATE
+// =====================
 function updatePlayer(){
 
-    player.vx = 0;
+    player.vx=0;
 
-    if(keys["ArrowLeft"]) player.vx = -player.speed;
-    if(keys["ArrowRight"]) player.vx = player.speed;
+    if(keys["ArrowLeft"]) player.vx=-player.speed;
+    if(keys["ArrowRight"]) player.vx=player.speed;
 
-    player.x += player.vx;
+    player.x+=player.vx;
 
-    player.vy += player.gravity;
-    player.y += player.vy;
-
-    if(player.y > 300){
-        player.y = 300;
-        player.vy = 0;
+    if(keys["Space"] && player.onGround){
+        player.vy=-12;
+        player.onGround=false;
     }
+
+    player.vy+=player.gravity;
+    player.y+=player.vy;
+
+    if(player.y>300){
+        player.y=300;
+        player.vy=0;
+        player.onGround=true;
+    }
+
+    if(player.cooldown>0) player.cooldown--;
 }
 
+// =====================
+// ENEMY AI (3 TYPE LOGIC)
+// =====================
 function updateEnemies(){
 
     enemies.forEach(e=>{
-        if(e.hp <= 0) return;
 
-        let dx = player.x - e.x;
+        if(!e.alive) return;
 
-        if(Math.abs(dx) < 300){
-            e.x += Math.sign(dx) * e.speed;
+        let dx=player.x-e.x;
+
+        if(e.type===0){
+            // 슬라임: 따라오기
+            if(Math.abs(dx)<400)
+                e.x+=Math.sign(dx)*e.speed;
+        }
+
+        if(e.type===1){
+            // 근접: 공격
+            if(Math.abs(dx)<40){
+                player.hp-=0.2;
+            } else if(Math.abs(dx)<300){
+                e.x+=Math.sign(dx)*e.speed;
+            }
+        }
+
+        if(e.type===2){
+            // 원거리
+            e.cooldown--;
+            if(e.cooldown<=0){
+                e.cooldown=80;
+
+                bullets.push({
+                    x:e.x,
+                    y:e.y,
+                    vx:Math.sign(dx)*5,
+                    from:"enemy"
+                });
+            }
         }
     });
 }
 
-function updateCombat(){
+// =====================
+// BULLETS + COLLISION
+// =====================
+function updateBullets(){
 
-    enemies.forEach(e=>{
-        if(Math.abs(player.x - e.x) < 40){
-            player.hp -= 0.05;
+    for(let i=bullets.length-1;i>=0;i--){
+
+        let b=bullets[i];
+
+        b.x+=b.vx;
+
+        if(b.from==="enemy"){
+
+            if(Math.abs(b.x-player.x)<20){
+                player.hp-=10;
+                bullets.splice(i,1);
+                continue;
+            }
+
+        } else {
+
+            enemies.forEach(e=>{
+                if(!e.alive) return;
+
+                if(Math.abs(b.x-e.x)<20){
+                    e.hp-=15;
+                    bullets.splice(i,1);
+
+                    if(e.hp<=0) e.alive=false;
+                }
+            });
+
         }
+    }
+}
+
+// =====================
+// PLAYER ATTACK
+// =====================
+function attack(){
+
+    if(player.cooldown>0) return;
+
+    player.cooldown=20;
+
+    bullets.push({
+        x:player.x+20,
+        y:player.y+10,
+        vx:8,
+        from:"player"
     });
 }
 
+// =====================
+// UPDATE MASTER
+// =====================
 function update(){
+
     if(game.paused) return;
 
     updatePlayer();
     updateEnemies();
-    updateCombat();
+    updateBullets();
 }
 
-// ======================
-// 5. DRAW
-// ======================
+// =====================
+// DRAW
+// =====================
 function draw(){
+
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     // player
@@ -125,10 +230,16 @@ function draw(){
 
     // enemies
     enemies.forEach(e=>{
-        if(e.hp<=0) return;
+        if(!e.alive) return;
 
-        ctx.fillStyle="green";
-        ctx.fillRect(e.x,e.y,40,40);
+        ctx.fillStyle = e.type===0?"green":e.type===1?"red":"purple";
+        ctx.fillRect(e.x,e.y,30,30);
+    });
+
+    // bullets
+    ctx.fillStyle="orange";
+    bullets.forEach(b=>{
+        ctx.fillRect(b.x,b.y,8,4);
     });
 
     // UI
@@ -136,9 +247,16 @@ function draw(){
     ctx.fillText("HP:"+player.hp.toFixed(0),20,20);
 }
 
-// ======================
-// 6. LOOP
-// ======================
+// =====================
+// CONTROLS
+// =====================
+window.addEventListener("keydown",e=>{
+    if(e.code==="KeyJ") attack();
+});
+
+// =====================
+// LOOP (1개만)
+// =====================
 function loop(){
     update();
     draw();
