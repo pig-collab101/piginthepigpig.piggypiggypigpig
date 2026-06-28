@@ -2,93 +2,117 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>Pig RPG Engine</title>
+<title>Pig RPG Engine v3</title>
 <style>
 body{margin:0;overflow:hidden;background:#87CEEB;}
 canvas{display:block;}
 </style>
 </head>
-
 <body>
 <canvas id="c"></canvas>
 
 <script>
+// =====================
+// 🎮 CORE ENGINE
+// =====================
 const canvas=document.getElementById("c");
 const ctx=canvas.getContext("2d");
 
 canvas.width=innerWidth;
 canvas.height=innerHeight;
 
-// ======================
-// 🧠 GAME STATE ENGINE
-// ======================
 const GAME={
-  state:"world", // world / battle
+  state:"world",
   keys:{},
   cameraX:0
 };
 
-// ======================
-// 🐷 PLAYER
-// ======================
-const player={
-  x:100,y:200,w:40,h:40,
-  vx:0,vy:0,
-  hp:100,maxHp:100,
-  dir:1
+// =====================
+// ⚡ EVENT SYSTEM
+// =====================
+const EVENT={
+  list:{},
+
+  on(n,f){
+    if(!this.list[n]) this.list[n]=[];
+    this.list[n].push(f);
+  },
+
+  emit(n,d){
+    (this.list[n]||[]).forEach(f=>f(d));
+  }
 };
 
-// ======================
-// 👾 DATA
-// ======================
-let monsters=[];
-let projectiles=[];
-let materials={iron:5,wood:5};
+// =====================
+// 🐷 PLAYER
+// =====================
+const player={
+  x:100,y:200,w:40,h:40,
+  hp:100,maxHp:100,
+  combo:0
+};
 
-// ======================
-// 🧬 MONSTER TEMPLATE (40종 확장용)
-// ======================
-const MONSTER_BASE=[
- {name:"슬라임",hp:30,atk:3,color:"green"},
- {name:"박쥐",hp:20,atk:5,color:"purple"},
- {name:"해골",hp:50,atk:8,color:"gray"}
-];
+// =====================
+// 🧬 ENTITIES
+// =====================
+const ENTITIES=[];
 
-// ======================
-// 🔥 MONSTER GENERATOR (40개 자동)
-// ======================
-function spawnMonsters(count){
-  monsters=[];
+// =====================
+// 👾 MONSTER SYSTEM
+// =====================
+function Monster(data){
+  Object.assign(this,data);
+  this.dead=false;
+
+  this.update=()=>{
+    if(this.dead) return;
+
+    let dx=player.x-this.x;
+    this.x+=Math.sign(dx)*(this.speed||1);
+  };
+}
+
+// =====================
+// 🔥 GENERATOR
+// =====================
+function spawn(count){
+  ENTITIES.length=0;
+
   for(let i=0;i<count;i++){
-    const base=MONSTER_BASE[i%MONSTER_BASE.length];
-
-    monsters.push({
-      ...base,
+    ENTITIES.push(new Monster({
+      name:"M"+i,
       x:300+i*60,
       y:200,
-      hp:base.hp+Math.random()*10,
-      dead:false
-    });
+      hp:20+i*2,
+      speed:0.5+(i%3)*0.3
+    }));
   }
 }
 
-// ======================
-// ⚔️ COMBAT ENGINE
-// ======================
+// =====================
+// ⚔️ COMBAT
+// =====================
 function attack(){
   if(GAME.state!=="battle") return;
 
-  monsters.forEach(m=>{
-    if(!m.dead && Math.abs(m.x-player.x)<60){
-      m.hp-=20;
-      if(m.hp<=0) m.dead=true;
+  player.combo++;
+
+  ENTITIES.forEach(e=>{
+    if(!e.dead && Math.abs(e.x-player.x)<60){
+      e.hp-=10+player.combo;
+      if(e.hp<=0){
+        e.dead=true;
+        EVENT.emit("kill",e);
+      }
     }
   });
 }
 
-// ======================
-// 🧪 CRAFT SYSTEM
-// ======================
+// =====================
+// 🧪 CRAFT
+// =====================
+const materials={iron:5,wood:5};
+
 const recipes={
   iron_sword:{iron:3,wood:1}
 };
@@ -105,12 +129,12 @@ function craft(name){
     materials[k]-=r[k];
   }
 
-  console.log("crafted:",name);
+  console.log("crafted",name);
 }
 
-// ======================
+// =====================
 // 🎮 INPUT
-// ======================
+// =====================
 addEventListener("keydown",e=>{
   GAME.keys[e.code]=true;
 
@@ -118,7 +142,7 @@ addEventListener("keydown",e=>{
 
   if(e.code==="KeyB"){
     GAME.state="battle";
-    spawnMonsters(10); // 40 가능
+    spawn(10);
   }
 
   if(e.code==="KeyM"){
@@ -134,28 +158,24 @@ addEventListener("keyup",e=>{
   GAME.keys[e.code]=false;
 });
 
-// ======================
-// 🔄 UPDATE ENGINE
-// ======================
+// =====================
+// 🔄 UPDATE
+// =====================
 function update(){
+
   if(GAME.keys["ArrowRight"]) player.x+=4;
   if(GAME.keys["ArrowLeft"]) player.x-=4;
 
   GAME.cameraX=player.x-innerWidth/2;
 
   if(GAME.state==="battle"){
-    monsters.forEach(m=>{
-      if(!m.dead){
-        let dx=player.x-m.x;
-        m.x+=Math.sign(dx)*0.5;
-      }
-    });
+    ENTITIES.forEach(e=>e.update());
   }
 }
 
-// ======================
-// 🎨 DRAW ENGINE
-// ======================
+// =====================
+// 🎨 DRAW
+// =====================
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -168,28 +188,26 @@ function draw(){
   ctx.fillRect(player.x-GAME.cameraX,player.y,40,40);
 
   // monsters
-  monsters.forEach(m=>{
-    if(m.dead) return;
-
-    ctx.fillStyle=m.color;
-    ctx.fillRect(m.x-GAME.cameraX,m.y,30,30);
+  ENTITIES.forEach(e=>{
+    if(e.dead) return;
+    ctx.fillStyle="green";
+    ctx.fillRect(e.x-GAME.cameraX,e.y,30,30);
   });
 
-  // UI
   ctx.fillStyle="#000";
   ctx.fillText("STATE:"+GAME.state,20,20);
 }
 
-// ======================
-// 🎮 LOOP
-// ======================
+// =====================
+// 🔁 LOOP
+// =====================
 function loop(){
   update();
   draw();
   requestAnimationFrame(loop);
 }
 
-spawnMonsters(5);
+spawn(5);
 loop();
 
 </script>
