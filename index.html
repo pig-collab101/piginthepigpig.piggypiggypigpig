@@ -184,15 +184,27 @@ class Player{
 
         }
 
-    }    attack(){
+    }    Player.prototype.attack = function(){
 
-        if(this.attackCooldown>0)return;
+    if(this.attackCooldown>0) return;
 
-        this.attackCooldown=12;
+    this.attackCooldown = 12;
 
-        hitEnemies(10,55);
+    const dmg = getAttack();
 
-    }
+    enemies.forEach(e=>{
+
+        if(Math.abs(e.x-this.x)<60){
+
+            e.hp -= dmg;
+
+            if(e.hp<=0){
+                e.dead = true;
+                coins += 10;
+            }
+        }
+    });
+};
 
     combo(){
 
@@ -432,6 +444,7 @@ class Skeleton{
 }
 
 const bones=[];
+const items = [];
 
 enemies.push(new Bat(900,180));
 enemies.push(new Bat(1200,220));
@@ -529,27 +542,63 @@ function updateParticles(){
         }
 
     }
+function updateItems(){
+
+    for(let i=items.length-1;i>=0;i--){
+
+        const item = items[i];
+
+        if(Math.abs(player.x-item.x)<30 &&
+           Math.abs(player.y-item.y)<30){
+
+            if(item.type==="coin") coins+=10;
+
+            if(item.type==="heart") player.hp=Math.min(player.maxHp, player.hp+20);
+
+            items.splice(i,1);
+        }
+    }
+}
 
 }function draw(){
 
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drawBackground();
 
-    // 하늘
-    ctx.fillStyle="#87CEEB";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+    drawPlatforms();
+    drawDungeon();
 
-    // 땅
-    ctx.fillStyle="#3CB043";
-    ctx.fillRect(0,groundY,canvas.width,canvas.height-groundY);
+    drawLava();
+    drawIce();
 
-    // 플레이어(돼지)
-    ctx.fillStyle="#FFB6C1";
-    ctx.fillRect(
-        player.x,
-        player.y,
-        player.w,
-        player.h
-    );
+    drawItems();
+    drawChest();
+
+    drawEnemies();
+    drawBossHUD();
+
+    drawDragon();
+    drawDragonFire();
+
+    drawDemonKing();
+
+    drawFireballs();
+    drawBones();
+    drawMagic();
+
+    drawParticles();
+    drawAfterImages();
+
+    drawPlayer();
+    drawPet();
+
+    drawHUD();
+    drawQuest();
+    drawMiniMap();
+    drawFPS();
+
+    drawDialogue();
+    drawVictory();
+}
 
     // 눈
     ctx.fillStyle="black";
@@ -1410,34 +1459,31 @@ function draw(){
 
 function update(){
 
+    if(game.paused || game.victory) return;
+
     player.update();
 
     collision();
-
     updateCamera();
 
     enemies.forEach(e=>e.update());
 
     updateFireballs();
-
     updateBones();
-
-    updateItems();
-
     updateParticles();
+    updateMagic();
+    updateDragonFire();
+    updateLava();
+    updateIce();
+    updateChest();
+    updatePortals();
+    updateBoss();
+    updateDragon();
+    updateMagic();
 
-    for(const enemy of enemies){
+    pet.update();
 
-        if(enemy.dead)continue;
-
-        if(enemy.hp<=0){
-
-            enemyDeath(enemy);
-
-        }
-
-    }
-
+    checkVictory();
 }
 
 //==========================
