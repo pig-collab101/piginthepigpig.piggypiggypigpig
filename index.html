@@ -1,103 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Chunk Block RPG</title>
+<style>
+body{margin:0;overflow:hidden;background:#87ceeb;}
+canvas{display:block;}
+</style>
+</head>
+<body>
 <canvas id="c"></canvas>
+
 <script>
 const c=document.getElementById("c");
-const x=c.getContext("2d");
+const ctx=c.getContext("2d");
 
 c.width=innerWidth;
 c.height=innerHeight;
 
 const keys={};
-addEventListener("keydown",e=>keys[e.code]=1);
-addEventListener("keyup",e=>keys[e.code]=0);
+addEventListener("keydown",e=>keys[e.code]=true);
+addEventListener("keyup",e=>keys[e.code]=false);
 
-let bullets=[];
+c.addEventListener("contextmenu",e=>e.preventDefault());
 
-const p={
-  x:200,y:200,vx:0,vy:0,dir:1
+/* =====================
+   PLAYER
+===================== */
+const player={
+x:100,y:100,vx:0,vy:0,w:30,h:40,onGround:false
 };
 
-addEventListener("mousedown",()=>{
-  bullets.push({
-    x:p.x+20*p.dir,
-    y:p.y-10,
-    vx:10*p.dir
-  });
+function updatePlayer(){
+if(keys.ArrowLeft) player.vx=-4;
+else if(keys.ArrowRight) player.vx=4;
+else player.vx*=0.8;
+
+if(keys.Space && player.onGround){
+player.vy=-10;
+player.onGround=false;
+}
+
+player.vy+=0.5;
+player.x+=player.vx;
+player.y+=player.vy;
+}
+
+/* =====================
+   CHUNK WORLD
+===================== */
+const CHUNK=500;
+const BLOCK=25;
+const chunks=new Map();
+
+function noise(x){
+return Math.sin(x*0.01)*20;
+}
+
+function block(x,y,type="dirt"){
+return{x,y,w:BLOCK,h:BLOCK,type};
+}
+
+function genChunk(cx){
+if(chunks.has(cx)) return chunks.get(cx);
+
+const b=[];
+const m=[];
+
+/* terrain */
+for(let i=0;i<20;i++){
+const x=cx*CHUNK+i*BLOCK;
+const y=c.height/2+noise(x);
+
+b.push(block(x,y,"grass"));
+for(let j=1;j<5;j++){
+b.push(block(x,y+j*BLOCK,"dirt"));
+}
+}
+
+/* monsters */
+for(let i=0;i<4;i++){
+m.push({
+x:cx*CHUNK+Math.random()*CHUNK,
+y:100,
+vx:0,hp:20
+});
+}
+
+const chunk={blocks:b,monsters:m};
+chunks.set(cx,chunk);
+return chunk;
+}
+
+function getCX(){return Math.floor(player.x/CHUNK);}
+
+/* =====================
+   COLLISION
+===================== */
+function collide(chunk){
+player.onGround=false;
+
+for(const b of chunk.blocks){
+if(
+player.x<b.x+b.w &&
+player.x+player.w>b.x &&
+player.y+player.h<b.y+5 &&
+player.y+player.h+player.vy>b.y
+){
+player.y=b.y-player.h;
+player.vy=0;
+player.onGround=true;
+}
+}
+}
+
+/* =====================
+   MONSTERS
+===================== */
+function updateMonsters(chunk){
+for(const m of chunk.monsters){
+if(m.hp<=0) continue;
+
+const dx=player.x-m.x;
+
+if(Math.abs(dx)<250){
+m.x+=Math.sign(dx)*1.2;
+}
+
+if(Math.abs(dx)<25){
+player.vy-=0.2;
+}
+}
+}
+
+/* =====================
+   MOUSE BLOCK SYSTEM
+===================== */
+let mouse={x:0,y:0};
+
+c.addEventListener("mousemove",e=>{
+mouse.x=e.clientX;
+mouse.y=e.clientY;
 });
 
-function drawStick(px,py,dir){
+c.addEventListener("mousedown",e=>{
+const cx=getCX();
+const chunk=genChunk(cx);
 
-  // 머리
-  x.beginPath();
-  x.arc(px,py,18,0,Math.PI*2);
-  x.stroke();
+const wx=mouse.x+cameraX;
+const wy=mouse.y;
 
-  // 몸
-  x.beginPath();
-  x.moveTo(px,py+18);
-  x.lineTo(px,py+70);
-  x.stroke();
+const bx=Math.floor(wx/BLOCK)*BLOCK;
+const by=Math.floor(wy/BLOCK)*BLOCK;
 
-  // 팔 (총 들고 있음)
-  x.beginPath();
-  x.moveTo(px,py+40);
-  x.lineTo(px+25*dir,py+45);
-  x.lineTo(px+40*dir,py+35);
-  x.stroke();
-
-  // 다리
-  x.beginPath();
-  x.moveTo(px,py+70);
-  x.lineTo(px-15,py+110);
-  x.moveTo(px,py+70);
-  x.lineTo(px+15,py+110);
-  x.stroke();
-
-  // 눈
-  x.fillRect(px-6,py-3,3,3);
-  x.fillRect(px+3,py-3,3,3);
+if(e.button===0){
+chunk.blocks.push(block(bx,by,"dirt"));
 }
 
+if(e.button===2){
+for(let i=chunk.blocks.length-1;i>=0;i--){
+const b=chunk.blocks[i];
+if(b.x===bx&&b.y===by){
+chunk.blocks.splice(i,1);
+break;
+}
+}
+}
+});
+
+/* =====================
+   CAMERA
+===================== */
+let cameraX=0;
+
+/* =====================
+   UPDATE
+===================== */
 function update(){
+updatePlayer();
 
-  if(keys.ArrowLeft){p.x-=5;p.dir=-1;}
-  if(keys.ArrowRight){p.x+=5;p.dir=1;}
-  if(keys.ArrowUp)p.y-=5;
-  if(keys.ArrowDown)p.y+=5;
+const cx=getCX();
+const chunk=genChunk(cx);
 
-  // 총알 이동
-  for(let i=bullets.length-1;i>=0;i--){
-    bullets[i].x+=bullets[i].vx;
-    if(bullets[i].x<-100||bullets[i].x>innerWidth+100){
-      bullets.splice(i,1);
-    }
-  }
+updateMonsters(chunk);
+collide(chunk);
+
+cameraX=player.x-innerWidth/2;
 }
 
+/* =====================
+   DRAW
+===================== */
 function draw(){
+ctx.clearRect(0,0,c.width,c.height);
 
-  x.clearRect(0,0,c.width,c.height);
+const cx=getCX();
+const chunk=genChunk(cx);
 
-  // 스틱맨
-  x.strokeStyle="black";
-  drawStick(p.x,p.y,p.dir);
-
-  // 총알
-  x.fillStyle="orange";
-  for(let b of bullets){
-    x.fillRect(b.x,b.y,8,3);
-  }
-
-  // 크로스헤어
-  x.beginPath();
-  x.arc(p.x+60*p.dir,p.y-10,5,0,Math.PI*2);
-  x.stroke();
+/* blocks */
+for(const b of chunk.blocks){
+ctx.fillStyle=b.type==="grass"?"green":"#8b5a2b";
+ctx.fillRect(b.x-cameraX,b.y,b.w,b.h);
 }
 
+/* monsters */
+ctx.fillStyle="red";
+for(const m of chunk.monsters){
+ctx.fillRect(m.x-cameraX,m.y,20,20);
+}
+
+/* player */
+ctx.fillStyle="pink";
+ctx.fillRect(player.x-cameraX,player.y,player.w,player.h);
+}
+
+/* =====================
+   LOOP
+===================== */
 function loop(){
-  update();
-  draw();
-  requestAnimationFrame(loop);
+update();
+draw();
+requestAnimationFrame(loop);
 }
-
 loop();
+
 </script>
+</body>
+</html>
