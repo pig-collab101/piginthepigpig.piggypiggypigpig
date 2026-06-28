@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Chunk Engine v2</title>
+<title>Battle Fix Engine</title>
 <style>
 body{margin:0;overflow:hidden;background:#87CEEB}
 canvas{display:block}
@@ -18,254 +18,186 @@ const ctx=canvas.getContext("2d");
 canvas.width=innerWidth;
 canvas.height=innerHeight;
 
-//////////////////////////////
-// 🌍 SEED WORLD
-//////////////////////////////
-const SEED = 12345;
-
-function rand(x){
-return Math.sin(x*SEED)*10000 - Math.floor(Math.sin(x*SEED)*10000);
-}
-
-function noise(x){
-return Math.sin(x*0.1)+Math.sin(x*0.03)*2;
-}
-
-//////////////////////////////
-// 🧱 WORLD BLOCKS
-//////////////////////////////
-const TILE=32;
-const CHUNK_SIZE=24;
-
-const chunks=new Map();
-
-function getBiome(x){
-if(x<200) return "plains";
-if(x<500) return "forest";
-return "cave";
-}
-
-function getBlockColor(type){
-if(type==="grass") return "#3cb043";
-if(type==="dirt") return "#8B5A2B";
-if(type==="stone") return "#777";
-if(type==="sand") return "#d9c27a";
-return "#000";
-}
-
-function generateChunk(cx){
-
-if(chunks.has(cx)) return chunks.get(cx);
-
-const blocks=[];
-
-for(let i=0;i<CHUNK_SIZE;i++){
-
-const wx=cx*CHUNK_SIZE+i;
-
-const biome=getBiome(wx);
-
-let h = Math.floor(10 + noise(wx)*3);
-
-let top="grass";
-let mid="dirt";
-let deep="stone";
-
-if(biome==="desert") top="sand";
-if(biome==="cave") top="stone";
-
-for(let y=0;y<h;y++){
-
-let type="stone";
-
-if(y===h-1) type=top;
-else if(y>h-4) type=mid;
-
-blocks.push({
-x:wx*TILE,
-y:(20-y)*TILE,
-type
-});
-
-}
-
-}
-
-chunks.set(cx,blocks);
-return blocks;
-}
-
-//////////////////////////////
+//////////////////////
 // 👤 PLAYER
-//////////////////////////////
+//////////////////////
 const player={
 x:100,y:100,
+w:25,h:35,
 vx:0,vy:0,
-w:20,h:28,
 onGround:false
 };
 
-const key={};
-addEventListener("keydown",e=>key[e.code]=true);
-addEventListener("keyup",e=>key[e.code]=false);
-
-//////////////////////////////
-// ⚔ COMBAT SYSTEM (분리됨)
-//////////////////////////////
-function attack(){
-for(const m of mobs){
-if(Math.abs(m.x-player.x)<40){
-m.hp-=10;
-}
-}
-}
-
-//////////////////////////////
-// 👾 AI SYSTEM
-//////////////////////////////
+//////////////////////
+// 👾 ENEMIES
+//////////////////////
 const mobs=[];
 
-function spawnMob(x){
+function spawnMob(x,y){
 mobs.push({
-x,
-y:100,
-hp:20,
-type:Math.random()>0.5?"chase":"wander"
+x,y,
+hp:30
 });
 }
 
-spawnMob(300);
-spawnMob(600);
+// 시작 적
+spawnMob(400,100);
+spawnMob(700,100);
 
-function updateMobs(){
-for(const m of mobs){
+//////////////////////
+// 🔫 BULLETS
+//////////////////////
+const bullets=[];
 
-if(m.type==="chase"){
-m.x += Math.sign(player.x-m.x)*0.5;
-}else{
-m.x += Math.sin(Date.now()/1000)*0.3;
+function shoot(){
+bullets.push({
+x:player.x+20,
+y:player.y+15,
+vx:playerDir*6,
+life:80
+});
 }
 
-}
-}
+//////////////////////
+// 🎮 INPUT
+//////////////////////
+const key={};
+let playerDir=1;
 
-//////////////////////////////
-// 🌫 CAMERA + FOG
-//////////////////////////////
-let cameraX=0;
+addEventListener("keydown",e=>{
+key[e.code]=true;
 
-function updateCamera(){
-cameraX=player.x-innerWidth/2;
-}
-
-function drawFog(){
-ctx.fillStyle="rgba(255,255,255,0.05)";
-ctx.fillRect(0,0,canvas.width,canvas.height);
+if(e.code==="Space" && player.onGround){
+player.vy=-8;
+player.onGround=false;
 }
 
-//////////////////////////////
-// 🎮 UPDATE PLAYER
-//////////////////////////////
+if(e.code==="KeyJ"){
+shoot();
+}
+});
+
+addEventListener("keyup",e=>{
+key[e.code]=false;
+});
+
+//////////////////////
+// 🌍 UPDATE PLAYER
+//////////////////////
 function updatePlayer(){
 
 player.vx=0;
 
-if(key["ArrowLeft"]) player.vx=-2;
-if(key["ArrowRight"]) player.vx=2;
-
-if(key["Space"] && player.onGround){
-player.vy=-6;
-player.onGround=false;
+if(key["ArrowLeft"]){
+player.vx=-3;
+playerDir=-1;
+}
+if(key["ArrowRight"]){
+player.vx=3;
+playerDir=1;
 }
 
-player.vy+=0.3;
+player.vy+=0.4;
 
 player.x+=player.vx;
 player.y+=player.vy;
 
-// collision
-player.onGround=false;
-
-const cx=Math.floor(player.x/(TILE*CHUNK_SIZE));
-const chunk=generateChunk(cx);
-
-for(const b of chunk){
-if(
-player.x < b.x+TILE &&
-player.x+player.w > b.x &&
-player.y < b.y+TILE &&
-player.y+player.h > b.y
-){
-player.y=b.y-player.h;
+// 바닥
+if(player.y>300){
+player.y=300;
 player.vy=0;
 player.onGround=true;
 }
-}
-}
-
-//////////////////////////////
-// 🎨 DRAW WORLD
-//////////////////////////////
-function drawWorld(){
-
-for(let i=-2;i<3;i++){
-
-const cx=Math.floor((player.x+i*innerWidth)/(TILE*CHUNK_SIZE));
-const chunk=generateChunk(cx);
-
-for(const b of chunk){
-
-ctx.fillStyle=getBlockColor(b.type);
-
-ctx.fillRect(
-b.x-cameraX,
-b.y,
-TILE,
-TILE
-);
-
-}
-}
 
 }
 
-//////////////////////////////
-// 👾 DRAW MOBS
-//////////////////////////////
-function drawMobs(){
-ctx.fillStyle="red";
+//////////////////////
+// 👾 UPDATE ENEMIES
+//////////////////////
+function updateMobs(){
 for(const m of mobs){
-ctx.fillRect(m.x-cameraX,m.y,20,20);
+
+if(m.hp<=0) continue;
+
+// AI (추격)
+if(m.x<player.x) m.x+=1;
+else m.x-=1;
+
+// 충돌 데미지
+if(Math.abs(m.x-player.x)<20){
+player.x-=2;
+}
+
 }
 }
 
-//////////////////////////////
-// 🎮 LOOP
-//////////////////////////////
-function loop(){
+//////////////////////
+// 🔫 BULLET LOGIC
+//////////////////////
+function updateBullets(){
 
-updatePlayer();
-updateMobs();
-updateCamera();
+for(let i=bullets.length-1;i>=0;i--){
+const b=bullets[i];
+
+b.x+=b.vx;
+b.life--;
+
+for(const m of mobs){
+if(m.hp<=0) continue;
+
+if(Math.abs(b.x-m.x)<20 && Math.abs(b.y-m.y)<20){
+m.hp-=10;
+b.life=0;
+}
+}
+
+if(b.life<=0){
+bullets.splice(i,1);
+}
+}
+
+}
+
+//////////////////////
+// 🎨 DRAW
+//////////////////////
+function draw(){
 
 ctx.clearRect(0,0,canvas.width,canvas.height);
 
-// sky
-ctx.fillStyle="#87CEEB";
-ctx.fillRect(0,0,canvas.width,canvas.height);
-
-drawWorld();
-drawMobs();
-drawFog();
-
 // player
 ctx.fillStyle="pink";
-ctx.fillRect(player.x-cameraX,player.y,player.w,player.h);
+ctx.fillRect(player.x,player.y,player.w,player.h);
 
+// mobs
+ctx.fillStyle="red";
+for(const m of mobs){
+if(m.hp<=0) continue;
+ctx.fillRect(m.x,m.y,25,25);
+}
+
+// bullets
+ctx.fillStyle="yellow";
+for(const b of bullets){
+ctx.fillRect(b.x,b.y,6,3);
+}
+
+}
+
+//////////////////////
+// LOOP
+//////////////////////
+function loop(){
+updatePlayer();
+updateMobs();
+updateBullets();
+
+draw();
 requestAnimationFrame(loop);
 }
 
 loop();
+
 </script>
 </body>
 </html>
