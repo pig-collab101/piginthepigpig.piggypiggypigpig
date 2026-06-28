@@ -1,213 +1,150 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>Pig RPG Engine v3</title>
+<meta charset="utf-8">
+<title>Pig Engine v1</title>
 <style>
 body{margin:0;overflow:hidden;background:#87CEEB;}
 canvas{display:block;}
 </style>
 </head>
+
 <body>
 <canvas id="c"></canvas>
 
 <script>
-// =====================
-// 🎮 CORE ENGINE
-// =====================
-const canvas=document.getElementById("c");
-const ctx=canvas.getContext("2d");
+// ======================
+// 1. CANVAS
+// ======================
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
 
-canvas.width=innerWidth;
-canvas.height=innerHeight;
-
-const GAME={
-  state:"world",
-  keys:{},
-  cameraX:0
-};
-
-// =====================
-// ⚡ EVENT SYSTEM
-// =====================
-const EVENT={
-  list:{},
-
-  on(n,f){
-    if(!this.list[n]) this.list[n]=[];
-    this.list[n].push(f);
-  },
-
-  emit(n,d){
-    (this.list[n]||[]).forEach(f=>f(d));
-  }
-};
-
-// =====================
-// 🐷 PLAYER
-// =====================
-const player={
-  x:100,y:200,w:40,h:40,
-  hp:100,maxHp:100,
-  combo:0
-};
-
-// =====================
-// 🧬 ENTITIES
-// =====================
-const ENTITIES=[];
-
-// =====================
-// 👾 MONSTER SYSTEM
-// =====================
-function Monster(data){
-  Object.assign(this,data);
-  this.dead=false;
-
-  this.update=()=>{
-    if(this.dead) return;
-
-    let dx=player.x-this.x;
-    this.x+=Math.sign(dx)*(this.speed||1);
-  };
+function resize(){
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
 }
+window.addEventListener("resize", resize);
+resize();
 
-// =====================
-// 🔥 GENERATOR
-// =====================
-function spawn(count){
-  ENTITIES.length=0;
+// ======================
+// 2. STATE (절대 여기서만 데이터)
+// ======================
+const game = {
+    paused:false
+};
 
-  for(let i=0;i<count;i++){
-    ENTITIES.push(new Monster({
-      name:"M"+i,
-      x:300+i*60,
-      y:200,
-      hp:20+i*2,
-      speed:0.5+(i%3)*0.3
-    }));
-  }
-}
+const player = {
+    x:100,
+    y:300,
+    vx:0,
+    vy:0,
+    speed:5,
+    gravity:0.7,
+    hp:100
+};
 
-// =====================
-// ⚔️ COMBAT
-// =====================
-function attack(){
-  if(GAME.state!=="battle") return;
+const keys = {};
 
-  player.combo++;
+const enemies = [
+    {x:500,y:300,hp:30,speed:1,type:"slime"},
+    {x:800,y:300,hp:50,speed:1.5,type:"bat"},
+    {x:1100,y:300,hp:80,speed:2,type:"orc"}
+];
 
-  ENTITIES.forEach(e=>{
-    if(!e.dead && Math.abs(e.x-player.x)<60){
-      e.hp-=10+player.combo;
-      if(e.hp<=0){
-        e.dead=true;
-        EVENT.emit("kill",e);
-      }
+// ======================
+// 3. INPUT
+// ======================
+window.addEventListener("keydown",e=>{
+    keys[e.code]=true;
+});
+
+window.addEventListener("keyup",e=>{
+    keys[e.code]=false;
+});
+
+// ======================
+// 4. UPDATE
+// ======================
+function updatePlayer(){
+
+    player.vx = 0;
+
+    if(keys["ArrowLeft"]) player.vx = -player.speed;
+    if(keys["ArrowRight"]) player.vx = player.speed;
+
+    player.x += player.vx;
+
+    player.vy += player.gravity;
+    player.y += player.vy;
+
+    if(player.y > 300){
+        player.y = 300;
+        player.vy = 0;
     }
-  });
 }
 
-// =====================
-// 🧪 CRAFT
-// =====================
-const materials={iron:5,wood:5};
+function updateEnemies(){
 
-const recipes={
-  iron_sword:{iron:3,wood:1}
-};
+    enemies.forEach(e=>{
+        if(e.hp <= 0) return;
 
-function craft(name){
-  const r=recipes[name];
-  if(!r) return;
+        let dx = player.x - e.x;
 
-  for(let k in r){
-    if(materials[k]<r[k]) return;
-  }
-
-  for(let k in r){
-    materials[k]-=r[k];
-  }
-
-  console.log("crafted",name);
+        if(Math.abs(dx) < 300){
+            e.x += Math.sign(dx) * e.speed;
+        }
+    });
 }
 
-// =====================
-// 🎮 INPUT
-// =====================
-addEventListener("keydown",e=>{
-  GAME.keys[e.code]=true;
+function updateCombat(){
 
-  if(e.code==="Space") attack();
+    enemies.forEach(e=>{
+        if(Math.abs(player.x - e.x) < 40){
+            player.hp -= 0.05;
+        }
+    });
+}
 
-  if(e.code==="KeyB"){
-    GAME.state="battle";
-    spawn(10);
-  }
-
-  if(e.code==="KeyM"){
-    GAME.state="world";
-  }
-
-  if(e.code==="KeyC"){
-    craft("iron_sword");
-  }
-});
-
-addEventListener("keyup",e=>{
-  GAME.keys[e.code]=false;
-});
-
-// =====================
-// 🔄 UPDATE
-// =====================
 function update(){
+    if(game.paused) return;
 
-  if(GAME.keys["ArrowRight"]) player.x+=4;
-  if(GAME.keys["ArrowLeft"]) player.x-=4;
-
-  GAME.cameraX=player.x-innerWidth/2;
-
-  if(GAME.state==="battle"){
-    ENTITIES.forEach(e=>e.update());
-  }
+    updatePlayer();
+    updateEnemies();
+    updateCombat();
 }
 
-// =====================
-// 🎨 DRAW
-// =====================
+// ======================
+// 5. DRAW
+// ======================
 function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // ground
-  ctx.fillStyle="#3CB043";
-  ctx.fillRect(0,300,canvas.width,200);
+    // player
+    ctx.fillStyle="pink";
+    ctx.fillRect(player.x,player.y,40,40);
 
-  // player
-  ctx.fillStyle="pink";
-  ctx.fillRect(player.x-GAME.cameraX,player.y,40,40);
+    // enemies
+    enemies.forEach(e=>{
+        if(e.hp<=0) return;
 
-  // monsters
-  ENTITIES.forEach(e=>{
-    if(e.dead) return;
-    ctx.fillStyle="green";
-    ctx.fillRect(e.x-GAME.cameraX,e.y,30,30);
-  });
+        ctx.fillStyle="green";
+        ctx.fillRect(e.x,e.y,40,40);
+    });
 
-  ctx.fillStyle="#000";
-  ctx.fillText("STATE:"+GAME.state,20,20);
+    // UI
+    ctx.fillStyle="black";
+    ctx.fillText("HP:"+player.hp.toFixed(0),20,20);
 }
 
-// =====================
-// 🔁 LOOP
-// =====================
+// ======================
+// 6. LOOP
+// ======================
 function loop(){
-  update();
-  draw();
-  requestAnimationFrame(loop);
+    update();
+    draw();
+    requestAnimationFrame(loop);
 }
 
-spawn(5);
 loop();
 
 </script>
